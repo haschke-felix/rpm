@@ -5,21 +5,23 @@ public:
 	RPM(uint8_t pin, unsigned int period = 100) :
 	   pin_(pin), period_(period),
 	   max_(0), offset_(10),
-	   ticks_(0), rpm_(0), armed_(true)
+	   ticks_(0), rpm_(0), lambda_(0.9), lambda_inv_(1.0 - lambda_),
+	   armed_(true)
 	{
-		t0_ = t1_ = t2_ = millis();
+		t1_ = t2_ = millis();
 		offset_half_ = offset_ / 2;
 	}
 
 	void process();
-	inline unsigned long value() const { return rpm_; }
+	inline unsigned int value() const { return rpm_; }
 
 private:
 	uint8_t pin_;
 	unsigned int period_;
 	int max_;
 	int offset_, offset_half_;
-	unsigned long t0_, t1_, t2_, ticks_, rpm_;
+	unsigned long t1_, t2_, ticks_;
+	float rpm_, lambda_, lambda_inv_;
 	bool armed_; // expecting next count?
 };
 
@@ -42,30 +44,15 @@ void RPM::process() {
 	t2_ = millis();
 	if (t2_ > t1_ + period_) {
 		max_ -= 1; // decay max
-		t1_ = t2_;
 
 		// compute rpm
-#if 0
-		Serial.print(adc);
-		Serial.print(",");
-		Serial.print(max_);
-		Serial.print(",");
-		Serial.print(ticks_);
-		Serial.print(",");
-		Serial.print(t2_-t0_);
-		Serial.print(",");
-		Serial.println(rpm_);
-#endif
-		if (ticks_ > 0) { // only update rpm if we have any count
-			rpm_ = (unsigned long)(60000 * ticks_ / (t2_ - t0_));
-			t0_ = t2_;
-			ticks_ = 0;
-		} else if (rpm_ > 0) { // otherwise slowly decay to zero
-			rpm_ -= 1;
-		}
+		unsigned long cur = (unsigned long)(60000 * ticks_ / (t2_ - t1_));
+		rpm_ = lambda_ * rpm_ + lambda_inv_ * cur;
+		ticks_ = 0;
+		t1_ = t2_;
 	} else if (t2_ < t1_) { // millis() overflow
 		ticks_ = 0;
-		t0_ = t1_ = t2_;
+		t1_ = t2_;
 	}
 }
 
