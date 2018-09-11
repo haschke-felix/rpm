@@ -5,23 +5,24 @@ public:
 	RPM(uint8_t pin, unsigned int period = 100) :
 	   pin_(pin), period_(period),
 	   max_(0), offset_(10),
-	   ticks_(0), rpm_(0), lambda_(0.9), lambda_inv_(1.0 - lambda_),
+	   rpm_(0), ticks_(0), min_ticks_(1),
 	   armed_(true)
 	{
+		t0_ = 0;
 		t1_ = t2_ = millis();
 		offset_half_ = offset_ / 2;
 	}
 
 	void process();
-	inline unsigned int value() const { return rpm_; }
+	inline unsigned long value() const { return rpm_; }
 
 private:
 	uint8_t pin_;
 	unsigned int period_;
 	int max_;
 	int offset_, offset_half_;
-	unsigned long t1_, t2_, ticks_;
-	float rpm_, lambda_, lambda_inv_;
+	unsigned long t0_, t1_, t2_, rpm_;
+	unsigned char ticks_, min_ticks_;
 	bool armed_; // expecting next count?
 };
 
@@ -44,15 +45,36 @@ void RPM::process() {
 	t2_ = millis();
 	if (t2_ > t1_ + period_) {
 		max_ -= 1; // decay max
-
-		// compute rpm
-		unsigned long cur = (unsigned long)(60000 * ticks_ / (t2_ - t1_));
-		rpm_ = lambda_ * rpm_ + lambda_inv_ * cur;
-		ticks_ = 0;
 		t1_ = t2_;
+
+		// compute current maximal rpm estimate
+		unsigned long cur_max = 60000ul / (t2_ - t0_); // not faster than this
+#if 1
+		Serial.print(adc);
+		Serial.print(",");
+		Serial.print(max_+1);
+		Serial.print(",");
+		Serial.print(ticks_);
+		Serial.print(",");
+		Serial.print(min_ticks_);
+		Serial.print(",");
+#endif
+		if (ticks_ >= min_ticks_) {
+			rpm_ = cur_max * ticks_;
+			min_ticks_ = ticks_; // increase expected number of ticks
+			ticks_ = 0;
+			t0_ = t2_;
+		} else {
+			if (rpm_ > cur_max) {
+				rpm_ = cur_max;
+				if (min_ticks_ > 1)
+					--min_ticks_;
+			}
+		}
+		Serial.println(rpm_);
 	} else if (t2_ < t1_) { // millis() overflow
 		ticks_ = 0;
-		t1_ = t2_;
+		t0_ = t1_ = t2_;
 	}
 }
 
@@ -93,5 +115,4 @@ void printData(){
 
 void loop() {
 	rpm.process();
-	Serial.println(rpm.value());
 }
