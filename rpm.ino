@@ -49,16 +49,6 @@ void RPM::process() {
 
 		// compute current maximal rpm estimate
 		unsigned long unit = 60000ul / (t2_ - t0_); // not faster than this
-#if 1
-		Serial.print(adc);
-		Serial.print(",");
-		Serial.print(max_+1);
-		Serial.print(",");
-		Serial.print(ticks_);
-		Serial.print(",");
-		Serial.print(min_ticks_);
-		Serial.print(",");
-#endif
 		if (ticks_ >= min_ticks_) {
 			rpm_ = unit * min_ticks_;
 			min_ticks_ = ticks_; // increase expected number of ticks
@@ -72,11 +62,23 @@ void RPM::process() {
 					--min_ticks_;
 			}
 		}
-		Serial.println(rpm_);
 	} else if (t2_ < t1_) { // millis() overflow
 		ticks_ = 0;
 		t0_ = t1_ = t2_;
 	}
+#if 1
+	Serial.print(t2_);
+	Serial.print(",");
+	Serial.print(adc);
+	Serial.print(",");
+	Serial.print(max_+1);
+	Serial.print(",");
+	Serial.print(ticks_);
+	Serial.print(",");
+	Serial.print(min_ticks_);
+	Serial.print(",");
+	Serial.println(rpm_);
+#endif
 }
 
 RPM rpm(A5);
