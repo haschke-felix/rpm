@@ -1,13 +1,11 @@
 #include "Arduino.h"
 
-#define MIN_TICKS 5
-
 class RPM {
 public:
 	RPM(uint8_t pin, unsigned int period = 100) :
 	   pin_(pin), period_(period),
 	   max_(0), offset_(10),
-	   rpm_(0), ticks_(0), min_ticks_(MIN_TICKS),
+	   rpm_(0), ticks_(0), min_ticks_(1),
 	   armed_(true)
 	{
 		t0_ = 0;
@@ -62,15 +60,15 @@ void RPM::process() {
 		Serial.print(",");
 #endif
 		if (ticks_ >= min_ticks_) {
-			rpm_ = unit * ticks_;
+			rpm_ = unit * min_ticks_;
 			min_ticks_ = ticks_; // increase expected number of ticks
 			ticks_ = 0;
 			t0_ = t2_;
 		} else {
-			unsigned long cur_max = (ticks_ ? ticks_ : 1) * unit;
+			unsigned long cur_max = (1+ticks_) * unit;
 			if (rpm_ > cur_max) {
 				rpm_ = cur_max;
-				if (min_ticks_ > MIN_TICKS)
+				if (min_ticks_ > 1)
 					--min_ticks_;
 			}
 		}
