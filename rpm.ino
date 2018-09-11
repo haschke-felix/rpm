@@ -1,78 +1,126 @@
 #include "Arduino.h"
+#include <util/atomic.h>
+
+void toggleLED() {
+	static bool state = false;
+	state = !state;
+	digitalWrite(13, state);
+}
 
 class RPM {
 public:
-	RPM(uint8_t pin) :
-	   pin_(pin), armed_(true), jitter_(0), t1_(0), period_(0)
+	RPM(uint8_t pin) : pin_(pin)
 	{
 	}
 
-	void process();
 	inline uint8_t pin() const { return pin_; }
-	inline unsigned long value() const;
-	inline unsigned long period() const { return period_; }
+	static unsigned long rps(unsigned long period_ms) {
+		return period_ms > 0 ? 1000ul / period_ms : 0;
+	}
+	static unsigned long rpm(unsigned long period_ms) {
+		return period_ms > 0 ? 60000ul / period_ms : 0;
+	}
+	unsigned long period() const;
+	void tick();
 
-private:
+//private:
 	uint8_t pin_;
-	bool armed_; // expecting next rising flank?
-	byte jitter_;
-	static const byte THRESHOLD = 1;  // adapt with speed? better: interrupt-based
-	unsigned long t1_;
-	unsigned long period_;
+	volatile bool value_ = false;
+	volatile unsigned long previous_ = 0;  // time of previous valid flank
+	volatile unsigned long latest_ = 0;  // time of latest observed flank
+	volatile unsigned long period_ = 0;
+
+	volatile unsigned int jitter_ = 0;
 };
 
-void RPM::process() {
-	byte value = digitalRead(pin_);
-	Serial.print(0);
-	if (armed_) {
-		if (value) ++jitter_;
-		else jitter_ = 0;
-
-		if (jitter_ > THRESHOLD) {  // count a tick after several positive values in a row
-			armed_ = false;
-			jitter_ = 0;
-			unsigned long t2 = micros();
-			period_ = (t2 - t1_);
-			t1_ = t2;
-			Serial.print(1);
-		}
-	} else if (!value) {
-		armed_ = true;
-	}
-	if (period_ != 0) {
-		unsigned long period = micros() - t1_;
-		if (period > period_)  // increase period if there was no new tick
-			period_ = period;
-	}
+unsigned long RPM::period() const {
 #if 1
-//	Serial.print(armed_);
-//	Serial.print(",");
-	Serial.print(period_ / 100000);
-	Serial.print(".");
-	Serial.print(period_ % 100000);
-	Serial.println("");
+	unsigned long p;
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+	{
+		p = period_;
+	}
+	return p;
+#else
+	unsigned long period = micros(); // compute period since t1_ with next command
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+	{
+		unsigned long p  = period_;
+		period -= previous_;
+		if (period > period_)  // increase period if there was no update since t1_
+			period_ = period;
+		else  // otherwise return period_
+			period = period_;
+	}
+	return period;
 #endif
 }
 
-unsigned long RPM::value() const {
-	return period_ > 0 ? 60000ul / period_ : 0;
+//              |      period      |
+// ______|||~~~~|____________||||~~|__________|..
+//              prev               latest     now
+void RPM::tick() {
+	// did we really had a change on our pin?
+	const bool curval = digitalRead(pin_);
+	if (curval == value_)
+		return;
+	value_ = curval;
+
+	const unsigned long now = millis();
+	unsigned long diff = now - latest_;
+	if (curval == LOW) // for latest, consider falling flanks only
+		latest_ = now;
+	if (diff < 1)  // consider as noise if changing too fast
+		return;
+
+	if (curval == HIGH) {  // on first rising flank after a while:
+		diff = latest_ - previous_;
+		if (diff < 100) return;  // Skip spurious double peaks
+		period_ = latest_ - previous_;
+		previous_ = latest_;
+		toggleLED();
+	}
 }
+
 
 RPM rpm(2);
 unsigned long last;
 
+static void tick () {
+	rpm.tick();
+}
+
 void setup() {
-	Serial.begin(9600);
+	Serial.begin(115200);
 	pinMode(rpm.pin(), INPUT);
+	pinMode(13, OUTPUT);
+	attachInterrupt(0, tick, CHANGE);
 	last = millis();
 }
 
 void loop() {
-	rpm.process();
-#if 0
+#if 1
 	unsigned long now = millis();
 	if (now - last > 100) {
-		Serial.println(rpm.period());
+		uint8_t oldSREG = SREG;
+		cli();
+		unsigned long prev = rpm.previous_;
+		unsigned long latest = rpm.latest_;
+		unsigned long period = rpm.period_;
+		SREG = oldSREG;
+
+		Serial.print(prev);
+		Serial.print(", ");
+		Serial.print(latest);
+		Serial.print(", ");
+		Serial.print(latest-prev);
+		Serial.print(", ");
+		Serial.print(period);
+		Serial.print(", ");
+		Serial.print(RPM::rps(period));
+		Serial.print(", ");
+		Serial.print(RPM::rpm(period));
+		Serial.println("");
 		last = now;
 	}
 #endif
