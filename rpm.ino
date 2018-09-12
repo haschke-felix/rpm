@@ -7,6 +7,7 @@ void toggleLED() {
 	digitalWrite(13, state);
 }
 
+#define ZERO_TIME 1000 // after 1s of no ticks consider no motion
 class RPM {
 public:
 	RPM(uint8_t pin) : pin_(pin)
@@ -23,37 +24,23 @@ public:
 	unsigned long period() const;
 	void tick();
 
-//private:
+private:
 	uint8_t pin_;
 	volatile bool value_ = false;
-	volatile unsigned long previous_ = 0;  // time of previous valid flank
-	volatile unsigned long latest_ = 0;  // time of latest observed flank
+	volatile unsigned long latest_ = 0;  // time of most recently observed falling flank
+	volatile unsigned long previous_ = 0;  // time of previous falling flank indicating cycle start
 	volatile unsigned long period_ = 0;
-
-	volatile unsigned int jitter_ = 0;
 };
 
 unsigned long RPM::period() const {
-#if 1
-	unsigned long p;
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
-	{
-		p = period_;
-	}
-	return p;
-#else
-	unsigned long period = micros(); // compute period since t1_ with next command
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
-	{
-		unsigned long p  = period_;
-		period -= previous_;
-		if (period > period_)  // increase period if there was no update since t1_
-			period_ = period;
-		else  // otherwise return period_
-			period = period_;
-	}
-	return period;
-#endif
+	uint8_t oldSREG = SREG;
+	cli();
+	unsigned long period = period_;
+	unsigned long latest = latest_;
+	SREG = oldSREG;
+	unsigned long estimate = millis() - latest; // estimate period from time since latest flank
+	return estimate > ZERO_TIME ? 0 : period; // report no motion
+//	return estimate > period ? estimate : period; // return the larger period of the two
 }
 
 //              |      period      |
@@ -77,8 +64,11 @@ void RPM::tick() {
 		diff = latest_ - previous_;
 		if (diff < 100) return;  // Skip spurious double peaks
 		period_ = latest_ - previous_;
+#if 0 // doesn't help for smoothing after restart?
+		if (now - latest_ > 2*ZERO_TIME) // reset timestamps to now after long time
+			latest_ = now;
+#endif
 		previous_ = latest_;
-		toggleLED();
 	}
 }
 
@@ -102,26 +92,8 @@ void loop() {
 #if 1
 	unsigned long now = millis();
 	if (now - last > 100) {
-		uint8_t oldSREG = SREG;
-		cli();
-		unsigned long prev = rpm.previous_;
-		unsigned long latest = rpm.latest_;
-		unsigned long period = rpm.period_;
-		SREG = oldSREG;
-
-		Serial.print(prev);
-		Serial.print(", ");
-		Serial.print(latest);
-		Serial.print(", ");
-		Serial.print(latest-prev);
-		Serial.print(", ");
-		Serial.print(period);
-		Serial.print(", ");
-		Serial.print(RPM::rps(period));
-		Serial.print(", ");
-		Serial.print(RPM::rpm(period));
-		Serial.println("");
 		last = now;
+		Serial.println(RPM::rpm(rpm.period()));
 	}
 #endif
 }
