@@ -75,11 +75,39 @@ void RPM::tick() {
 
 
 RPM rpm(2);
-unsigned long last;
 
 static void tick () {
 	rpm.tick();
 }
+
+#define PIN_PWM 3
+#define PIN_RELAY 4
+void pwm() {
+	static unsigned long last = 0;
+	static byte relay = 0;
+
+	byte pwm;
+	int value = analogRead(A5);
+	if(value < 220)
+		pwm	= 0;
+	else if(value > 680)
+		pwm = 255;
+	else
+		pwm = map(value, 220, 680, 0, 255);
+
+	byte relay_new = value > 200;
+	if (relay_new != relay) {
+		// avoid switching the relay too fast
+		unsigned long now = millis();
+		if (now - last > 1000) {
+			last = now;
+			relay = relay_new;
+			digitalWrite(PIN_RELAY, !relay);
+		}
+	}
+	analogWrite(PIN_PWM, pwm);
+}
+
 
 void setup() {
 	Serial.begin(115200);
@@ -92,10 +120,18 @@ void setup() {
 	pinMode(PIN_LED, OUTPUT);
 
 	attachInterrupt(0, tick, CHANGE);
-	last = millis();
+
+	pinMode(A5,INPUT);
+	pinMode(PIN_PWM, OUTPUT);
+	pinMode(PIN_RELAY, OUTPUT);
+	digitalWrite(PIN_RELAY, 1);
 }
 
 void loop() {
+	static unsigned long last = 0;
+
+	pwm();
+
 	unsigned long now = millis();
 	if (now - last > 250) {
 		last = now;
