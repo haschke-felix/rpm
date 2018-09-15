@@ -83,17 +83,30 @@ static void tick () {
 void setup() {
 	Serial.begin(115200);
 	pinMode(rpm.pin(), INPUT);
+	pinMode(A0,INPUT);
+	pinMode(A1,INPUT);
+	pinMode(A2,INPUT);
+	pinMode(A3,INPUT);
+	pinMode(A4,INPUT);
 	pinMode(13, OUTPUT);
 	attachInterrupt(0, tick, CHANGE);
 	last = millis();
 }
 
 void loop() {
-#if 1
 	unsigned long now = millis();
 	if (now - last > 100) {
 		last = now;
+		Serial.print(analogRead(A0));
+		Serial.print(",");
+		Serial.print(analogRead(A1));
+		Serial.print(",");
+		Serial.print(analogRead(A2));
+		Serial.print(",");
+		Serial.print(analogRead(A3));
+		Serial.print(",");
+		Serial.print(analogRead(A4));
+		Serial.print(",");
 		Serial.println(RPM::rpm(rpm.period()));
 	}
-#endif
 }
