@@ -1,10 +1,11 @@
 #include "Arduino.h"
 #include <util/atomic.h>
 
+#define PIN_LED 13
 void toggleLED() {
 	static bool state = false;
 	state = !state;
-	digitalWrite(13, state);
+	digitalWrite(PIN_LED, state);
 }
 
 #define ZERO_TIME 1000 // after 1s of no ticks consider no motion
@@ -88,7 +89,8 @@ void setup() {
 	pinMode(A2,INPUT);
 	pinMode(A3,INPUT);
 	pinMode(A4,INPUT);
-	pinMode(13, OUTPUT);
+	pinMode(PIN_LED, OUTPUT);
+
 	attachInterrupt(0, tick, CHANGE);
 	last = millis();
 }
