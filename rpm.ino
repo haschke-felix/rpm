@@ -97,7 +97,7 @@ void setup() {
 
 void loop() {
 	unsigned long now = millis();
-	if (now - last > 100) {
+	if (now - last > 250) {
 		last = now;
 		Serial.print(analogRead(A0));
 		Serial.print(",");
