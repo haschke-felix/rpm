@@ -8,7 +8,7 @@ void toggleLED() {
 	digitalWrite(PIN_LED, state);
 }
 
-#define ZERO_TIME 1000 // after 1s of no ticks consider no motion
+#define ZERO_TIME 5000 // after 5s of no ticks consider no motion
 class RPM {
 public:
 	RPM(uint8_t pin) : pin_(pin)
@@ -40,8 +40,9 @@ unsigned long RPM::period() const {
 	unsigned long latest = latest_;
 	SREG = oldSREG;
 	unsigned long estimate = millis() - latest; // estimate period from time since latest flank
-	return estimate > ZERO_TIME ? 0 : period; // report no motion
-//	return estimate > period ? estimate : period; // return the larger period of the two
+	if (estimate > ZERO_TIME) return 0; // report no motion
+	else if (estimate > period) return estimate; // return the larger period of the two
+	else return period;
 }
 
 //              |      period      |
